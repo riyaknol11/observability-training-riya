@@ -5,7 +5,6 @@ spring:
 server:
   port: 8080
 
-# ── Actuator ──────────────────────────────────────────────────────────────────
 management:
   endpoints:
     web:
@@ -17,19 +16,12 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
-
-  # ── Distributed Tracing (Micrometer) ──────────────────────────────────────
   tracing:
     sampling:
       probability: 1.0    # Sample 100% of requests
     enabled: true
-
-  # ── OTLP Exporter (Spring Boot 3 correct property path) ───────────────────
-  # This sends traces: App → OTel Collector → Tempo
   otlp:
     tracing:
       endpoint: http://otel-collector:4318/v1/traces
-
-# ── Logging ───────────────────────────────────────────────────────────────────
 logging:
   config: classpath:logback-spring.xml

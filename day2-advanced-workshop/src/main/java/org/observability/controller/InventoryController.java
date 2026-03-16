@@ -17,10 +17,6 @@ public class InventoryController {
 
     private final InventoryService inventoryService;
 
-    /**
-     * GET /api/inventory/{itemId}
-     * Returns inventory count. Uses itemId path variable for custom span attribute.
-     */
     @GetMapping("/{itemId}")
     public ResponseEntity<?> getInventory(@PathVariable String itemId) {
         log.info("Received inventory request for itemId={}", itemId);
@@ -43,10 +39,6 @@ public class InventoryController {
         }
     }
 
-    /**
-     * GET /api/inventory/{itemId}/validate?quantity=10
-     * Validates if enough stock is available.
-     */
     @GetMapping("/{itemId}/validate")
     public ResponseEntity<?> validateStock(
             @PathVariable String itemId,
@@ -71,10 +63,6 @@ public class InventoryController {
         }
     }
 
-    /**
-     * GET /api/inventory/health
-     * Simple health-check endpoint.
-     */
     @GetMapping("/health")
     public ResponseEntity<?> health() {
         return ResponseEntity.ok(Map.of("status", "UP", "service", "inventory-service"));

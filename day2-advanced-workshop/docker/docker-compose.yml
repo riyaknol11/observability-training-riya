@@ -1,17 +1,5 @@
 version: "3.9"
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Observability Stack — Day 2
-#  Trace pipeline:
-#    inventory-service → (OTLP HTTP :4318) → otel-collector → (OTLP gRPC :4317) → tempo
-#  Log pipeline:
-#    inventory-service → (loki4j HTTP) → loki
-#  Metrics pipeline:
-#    inventory-service → (Prometheus scrape) → prometheus
-#  Visualisation:
-#    grafana (connects to all three backends)
-# ─────────────────────────────────────────────────────────────────────────────
-
 networks:
   observability:
     driver: bridge
@@ -23,17 +11,16 @@ volumes:
 
 services:
 
-  # ── Spring Boot Application ─────────────────────────────────────────────────
   inventory-service:
     build:
-      context: ..                 # project root (where pom.xml lives)
+      context: ..
       dockerfile: Dockerfile
     container_name: inventory-service
     ports:
       - "8080:8080"
     environment:
       - SPRING_APPLICATION_NAME=inventory-service
-      # Override OTLP endpoint for Docker networking
+      # Overriding OTLP endpoint for Docker networking
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - OTEL_SERVICE_NAME=inventory-service
     depends_on:
@@ -41,8 +28,6 @@ services:
       - loki
     networks:
       - observability
-
-  # ── OpenTelemetry Collector ─────────────────────────────────────────────────
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.100.0
     container_name: otel-collector
@@ -58,7 +43,6 @@ services:
     networks:
       - observability
 
-  # ── Grafana Tempo (Trace Backend) ───────────────────────────────────────────
   tempo:
     image: grafana/tempo:2.4.2
     container_name: tempo
@@ -72,7 +56,6 @@ services:
     networks:
       - observability
 
-  # ── Grafana Loki (Log Backend) ──────────────────────────────────────────────
   loki:
     image: grafana/loki:2.9.7
     container_name: loki
@@ -84,7 +67,6 @@ services:
     networks:
       - observability
 
-  # ── Prometheus (Metrics Backend) ────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:v2.51.2
     container_name: prometheus
@@ -100,7 +82,6 @@ services:
     networks:
       - observability
 
-  # ── Grafana (Visualisation) ─────────────────────────────────────────────────
   grafana:
     image: grafana/grafana:10.4.2
     container_name: grafana
