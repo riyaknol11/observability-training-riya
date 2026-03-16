@@ -1,0 +1,54 @@
+apiVersion: 1
+
+datasources:
+  # ── Prometheus ──────────────────────────────────────────────────────────────
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      httpMethod: POST
+      exemplarTraceIdDestinations:
+        - name: traceID
+          datasourceUid: tempo
+
+  # ── Loki ────────────────────────────────────────────────────────────────────
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      # Derive traces from traceId field in log lines (Log-to-Trace correlation)
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: '"traceId":"([^"]+)"'
+          name: traceId
+          url: "$${__value.raw}"
+
+  # ── Grafana Tempo ────────────────────────────────────────────────────────────
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      httpMethod: GET
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      # Trace-to-Logs correlation (Tempo → Loki)
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: "-1m"
+        spanEndTimeShift: "1m"
+        filterByTraceID: true
+        filterBySpanID: false
+        customQuery: true
+        query: '{app="${__span.tags["service.name"]}"} | json | traceId="${__trace.traceId}"'
+      # Trace-to-Metrics
+      tracesToMetrics:
+        datasourceUid: prometheus

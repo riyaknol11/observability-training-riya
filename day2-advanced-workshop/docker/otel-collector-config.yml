@@ -1,0 +1,39 @@
+# OpenTelemetry Collector configuration
+# Pipeline: App (OTLP HTTP) --> OTel Collector --> Grafana Tempo
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318   # Receives traces from the Spring Boot app
+      grpc:
+        endpoint: 0.0.0.0:4317   # Also accept gRPC (optional)
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+  # Add resource attributes
+  resource:
+    attributes:
+      - action: insert
+        key: deployment.environment
+        value: local
+
+exporters:
+  # Export traces to Grafana Tempo
+  otlp/tempo:
+    endpoint: tempo:4317    # Tempo gRPC endpoint
+    tls:
+      insecure: true
+
+  # Debug logging (visible in otel-collector container logs)
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [otlp/tempo, debug]

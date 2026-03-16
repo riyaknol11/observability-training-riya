@@ -1,0 +1,122 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Observability Stack — Day 2
+#  Trace pipeline:
+#    inventory-service → (OTLP HTTP :4318) → otel-collector → (OTLP gRPC :4317) → tempo
+#  Log pipeline:
+#    inventory-service → (loki4j HTTP) → loki
+#  Metrics pipeline:
+#    inventory-service → (Prometheus scrape) → prometheus
+#  Visualisation:
+#    grafana (connects to all three backends)
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  observability:
+    driver: bridge
+
+volumes:
+  prometheus_data: {}
+  grafana_data: {}
+  tempo_data: {}
+
+services:
+
+  # ── Spring Boot Application ─────────────────────────────────────────────────
+  inventory-service:
+    build:
+      context: ..                 # project root (where pom.xml lives)
+      dockerfile: Dockerfile
+    container_name: inventory-service
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_APPLICATION_NAME=inventory-service
+      # Override OTLP endpoint for Docker networking
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_SERVICE_NAME=inventory-service
+    depends_on:
+      - otel-collector
+      - loki
+    networks:
+      - observability
+
+  # ── OpenTelemetry Collector ─────────────────────────────────────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.100.0
+    container_name: otel-collector
+    command: ["--config=/etc/otel/config.yml"]
+    volumes:
+      - ./otel-collector-config.yml:/etc/otel/config.yml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8888:8888"   # Prometheus metrics for collector itself
+    depends_on:
+      - tempo
+    networks:
+      - observability
+
+  # ── Grafana Tempo (Trace Backend) ───────────────────────────────────────────
+  tempo:
+    image: grafana/tempo:2.4.2
+    container_name: tempo
+    command: ["-config.file=/etc/tempo/tempo-config.yml"]
+    volumes:
+      - ./tempo-config.yml:/etc/tempo/tempo-config.yml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"   # Tempo HTTP API (Grafana reads here)
+      - "4319:4317"   # Tempo OTLP gRPC (mapped to host 4319 to avoid conflict)
+    networks:
+      - observability
+
+  # ── Grafana Loki (Log Backend) ──────────────────────────────────────────────
+  loki:
+    image: grafana/loki:2.9.7
+    container_name: loki
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    volumes:
+      - ./loki-config.yml:/etc/loki/loki-config.yml:ro
+    ports:
+      - "3100:3100"
+    networks:
+      - observability
+
+  # ── Prometheus (Metrics Backend) ────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - observability
+
+  # ── Grafana (Visualisation) ─────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor correlations
+    volumes:
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    networks:
+      - observability
