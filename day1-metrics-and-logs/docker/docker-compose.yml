@@ -1,0 +1,70 @@
+version: "3.9"
+
+networks:
+  observability:
+    name: day1_observability
+    driver: bridge
+
+volumes:
+  prometheus_data: {}
+  grafana_data: {}
+
+services:
+
+  inventory-service:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: inventory-service
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_APPLICATION_NAME=inventory-service
+    depends_on:
+      - loki
+    networks:
+      - observability
+
+  loki:
+    image: grafana/loki:2.9.7
+    container_name: loki
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    volumes:
+      - ./loki-config.yml:/etc/loki/loki-config.yml:ro
+    ports:
+      - "3100:3100"
+    networks:
+      - observability
+
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - observability
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - observability
